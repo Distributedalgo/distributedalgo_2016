@@ -49,22 +49,25 @@ public class Singhal_Component extends UnicastRemoteObject implements Singhal_RM
 		printLog("Process-" + pId + " started");
 	}
 	
+	// Execute jobs in this process
 	@Override
 	public void execute() throws RemoteException {
 		long tStart = System.currentTimeMillis();
 		printLog("Start executing thread Process-" + pId);
 		
+		// Random delay before executing jobs
 		try {
 			Thread.sleep(random.nextInt(MAX_EXEC_DELAY));
 		} catch(InterruptedException e) {
 			throw new RuntimeException(e);
 		}
 
-		if(token == null) sendFeasibleRequest();
-		checkToken();
-		criticalSection();
-		releaseToken();
+		if(token == null) sendFeasibleRequest();	// only send request if no token exists
+		checkToken();		// Check for token, giving delay
+		criticalSection();	// Execute critical section
+		releaseToken();		// Release the token after critical section has been completed.
 		
+		// Random delay after executing jobs
 		try {
 			Thread.sleep(random.nextInt(MAX_EXEC_DELAY));
 		} catch(InterruptedException e) {
@@ -74,12 +77,23 @@ public class Singhal_Component extends UnicastRemoteObject implements Singhal_RM
 		long tFinish = System.currentTimeMillis();
 		execFinished = true;
 		printLog("Finished executing thread Process-" + pId + ", " + (tFinish - tStart) + " ms.");
+    	printLog("------------------------------------------------------");
+        printLog("Process-" + pId + " final --> N: " + N);
+        printLog("Process-" + pId + " final --> S: " + S);
+        if(token != null) {
+        	printLog("------------------------------------------------------");
+        	printLog("Token final --> N: " + token.getTN());
+        	printLog("Token final --> S: " + token.getTS());
+        }
+        printLog("------------------------------------------------------");
 	}
 
+	// Receive token from other processes
 	@Override
 	public void receiveToken(TokenMsg tokenMsg) throws RemoteException {
         printLog("Process-" + pId + " received token");
         token = tokenMsg.getToken();
+        S.set(pId, "E");
 	}
 	
 	// Receive request from other processes
@@ -87,8 +101,6 @@ public class Singhal_Component extends UnicastRemoteObject implements Singhal_RM
 	public synchronized void receiveReq(RequestMsg reqMsg) throws RemoteException {
 		int srcId = reqMsg.getSrcId();
 		int reqSeq = reqMsg.getReqSeq();
-        List<Integer> TN = token.getTN();
-        List<String> TS = token.getTS();
 		
 		printLog("Process-" + pId + " received request from process-" + srcId
 						+ " with sequence " + reqSeq);
@@ -121,6 +133,8 @@ public class Singhal_Component extends UnicastRemoteObject implements Singhal_RM
 				}
 				break;
 			case "H":			// if holding the token, send it to the requesting process
+		        List<Integer> TN = token.getTN();
+		        List<String> TS = token.getTS();
 				S.set(srcId, "R");
 				S.set(pId, "O");
 				TS.set(srcId, "R");
@@ -133,6 +147,7 @@ public class Singhal_Component extends UnicastRemoteObject implements Singhal_RM
 		}
 	}
 	
+	// Reset and initialize component
 	@Override
 	public void resetState() throws RemoteException {
 		this.S = new ArrayList<String>(nProc);
@@ -154,11 +169,13 @@ public class Singhal_Component extends UnicastRemoteObject implements Singhal_RM
 		}
 	}
 	
+	// Get process ID (remote)
 	@Override
 	public int getProcId() throws RemoteException {
 		return pId;
 	}
 	
+	// Check whether the process (remote) is finished
 	@Override
 	public boolean isExecFinished() throws RemoteException {
 		return execFinished;
@@ -172,7 +189,7 @@ public class Singhal_Component extends UnicastRemoteObject implements Singhal_RM
   
         for (int i = 0; i < nProc; i++) {
         	if(i == pId) continue;		// Skip current process
-        	if(S.get(i) == "R") {
+        	if(S.get(i).equals("R")) {
 	            Singhal_RMI dest = getProcess(remoteAddrs[i]);
 	            try {
 	                RequestMsg reqMsg = new RequestMsg(pId, remoteAddrs[pId], N.get(pId));
@@ -195,9 +212,15 @@ public class Singhal_Component extends UnicastRemoteObject implements Singhal_RM
         int counterO = 0;
         
         TS.set(pId, "O");
-       
+
+    	printLog("------------------------------------------------------");
+        printLog("Before releasing token from process-" + pId + " --> TN: " + TN);
+        printLog("Before releasing token from process-" + pId + " --> TS: " + TS);
+        printLog("Process-" + pId + " before releasing token --> N: " + N);
+        printLog("Process-" + pId + " before releasing token --> S: " + S);
+        printLog("------------------------------------------------------");
+        
         for(int i = 0; i < nProc; i++) {	// Update information on other processes
-        	if(S.get(i) == "O") counterO++;
         	if(i == pId) continue;
         	if(N.get(i) > TN.get(i)) {
         		TN.set(i, N.get(i));
@@ -206,8 +229,8 @@ public class Singhal_Component extends UnicastRemoteObject implements Singhal_RM
         		N.set(i, TN.get(i));
         		S.set(i, TS.get(i));
         	}
-        	
         }
+        
     	printLog("------------------------------------------------------");
         printLog("Releasing token from process-" + pId + " --> TN: " + TN);
         printLog("Releasing token from process-" + pId + " --> TS: " + TS);
@@ -215,15 +238,19 @@ public class Singhal_Component extends UnicastRemoteObject implements Singhal_RM
         printLog("Process-" + pId + " updated --> S: " + S);
         printLog("------------------------------------------------------");
         
+        for(int i = 0; i < nProc; i++) {
+        	if(S.get(i).equals("O")) counterO++;
+        }
         if(counterO == nProc) {		// Nobody requesting
         	S.set(pId, "H");
         	printLog("Process-" + pId + " set to H, nobody requesting");
         } else {
         	for(int i = 0; i < nProc; i++) {
         		if(i == pId) continue;
-        		if(S.get(i) == "R") {
+        		if(S.get(i).equalsIgnoreCase("R")) {
         			printLog("Process-" + pId + " sends token (after release) to Process-" + i);
         			sendToken(remoteAddrs[i]);
+        	        printLog("------------------------------------------------------");
         			break;		// only one token sent
         		}
         	}

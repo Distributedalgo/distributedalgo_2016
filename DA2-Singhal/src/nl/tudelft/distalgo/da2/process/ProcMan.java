@@ -1,5 +1,6 @@
 package nl.tudelft.distalgo.da2.process;
 
+import java.io.IOException;
 import java.net.MalformedURLException;
 import java.rmi.AlreadyBoundException;
 import java.rmi.Naming;
@@ -7,16 +8,24 @@ import java.rmi.RemoteException;
 import java.util.ArrayList;
 import java.util.List;
 
+import nl.tudelft.distalgo.da2.ConfigReader;
+
 public class ProcMan {
 
 	private ArrayList<Singhal_Component> processes;
 	
 	public void startServerRMI() {
 		
-		List<String> addrs = new ArrayList<String>(10);
-		addrs.add("rmi://localhost/Singhal1");
-		addrs.add("rmi://localhost/Singhal2");
-		addrs.add("rmi://localhost/Singhal3");
+		List<String> addrs = new ArrayList<String>();
+		ConfigReader config = null;
+		
+		try {
+			config = new ConfigReader("network.properties");
+		} catch (IOException e1) {
+			e1.printStackTrace();
+		}
+		
+		addrs = config.getAddrs();
 		
 		int pId = 0;
 		

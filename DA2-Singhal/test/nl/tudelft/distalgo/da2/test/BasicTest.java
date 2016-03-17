@@ -44,7 +44,6 @@ public class BasicTest {
 			Assert.assertTrue(p1.isExecFinished());
 			Assert.assertTrue(p2.isExecFinished());
 			Assert.assertTrue(p3.isExecFinished());
-			
 		} catch(Exception e) {
 			e.printStackTrace();
 			Assert.fail();
